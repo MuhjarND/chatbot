@@ -1,0 +1,7 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Forward all application requests to Laravel's public front controller
+    # without requiring /public in the browser URL.
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
