@@ -33,6 +33,11 @@ class ApplicationsTableSeeder extends Seeder
                 'base_url' => config('chatbot.app_base_urls.bukutamu', 'https://bukutamu.pta-papuabarat.go.id'),
             ],
             [
+                'code'     => 'koperasi',
+                'name'     => 'Koperasi',
+                'base_url' => config('chatbot.app_base_urls.koperasi', 'https://koperasi.pta-papuabarat.go.id'),
+            ],
+            [
                 'code'     => 'sikasuar',
                 'name'     => 'Sikasuar',
                 'base_url' => config('chatbot.app_base_urls.sikasuar', 'https://sikasuar.pta-papuabarat.go.id'),
