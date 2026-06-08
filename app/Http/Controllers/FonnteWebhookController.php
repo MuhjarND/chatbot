@@ -12,6 +12,7 @@ use App\Services\MagicLoginService;
 use App\Services\AccessLogService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class FonnteWebhookController extends Controller
@@ -113,11 +114,14 @@ class FonnteWebhookController extends Controller
      */
     protected function handleMenu(Employee $employee, string $sender)
     {
-        $accounts = EmployeeAppAccount::where('employee_id', $employee->id)
-            ->where('is_active', true)
-            ->get();
+        $accounts = $this->getActiveAccounts($employee);
 
         if ($accounts->isEmpty()) {
+            Log::info('Webhook menu has no active app accounts', [
+                'employee_id' => $employee->id,
+                'sender' => $sender,
+            ]);
+
             $this->fonnteService->sendMessage(
                 $sender,
                 'Anda belum memiliki akses ke aplikasi manapun. Silakan hubungi admin.'
@@ -125,14 +129,15 @@ class FonnteWebhookController extends Controller
             return;
         }
 
-        // Load active applications matching the employee's accounts
-        $appCodes = $accounts->pluck('application_code')->toArray();
-        $apps = Application::whereIn('code', $appCodes)
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        $apps = $this->getAvailableApplications($employee);
 
         if ($apps->isEmpty()) {
+            Log::warning('Webhook menu accounts exist but no active applications resolved', [
+                'employee_id' => $employee->id,
+                'sender' => $sender,
+                'account_application_codes' => $accounts->pluck('application_code')->values()->all(),
+            ]);
+
             $this->fonnteService->sendMessage(
                 $sender,
                 'Tidak ada aplikasi aktif yang tersedia saat ini.'
@@ -167,16 +172,7 @@ class FonnteWebhookController extends Controller
      */
     protected function handleAppSelection(Employee $employee, string $sender, int $selection)
     {
-        // Get employee's active app accounts
-        $accounts = EmployeeAppAccount::where('employee_id', $employee->id)
-            ->where('is_active', true)
-            ->get();
-
-        $appCodes = $accounts->pluck('application_code')->toArray();
-        $apps = Application::whereIn('code', $appCodes)
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        $apps = $this->getAvailableApplications($employee);
 
         if ($selection < 1 || $selection > $apps->count()) {
             $this->fonnteService->sendMessage(
@@ -240,5 +236,51 @@ class FonnteWebhookController extends Controller
             'status'           => 'success',
             'message'          => 'Magic link sent for ' . $selectedApp->name,
         ]);
+    }
+
+    /**
+     * Get active application account rows for the employee.
+     */
+    protected function getActiveAccounts(Employee $employee)
+    {
+        return EmployeeAppAccount::where('employee_id', $employee->id)
+            ->where('is_active', true)
+            ->get();
+    }
+
+    /**
+     * Resolve active applications available to the employee.
+     *
+     * The join normalizes application codes to avoid hidden data issues such as
+     * accidental spaces or uppercase codes in employee_app_accounts.
+     */
+    protected function getAvailableApplications(Employee $employee)
+    {
+        $apps = Application::query()
+            ->select('applications.*')
+            ->join('employee_app_accounts', function ($join) {
+                $join->on(
+                    DB::raw('LOWER(TRIM(employee_app_accounts.application_code))'),
+                    '=',
+                    DB::raw('LOWER(TRIM(applications.code))')
+                );
+            })
+            ->where('employee_app_accounts.employee_id', $employee->id)
+            ->where('employee_app_accounts.is_active', true)
+            ->where('applications.is_active', true)
+            ->distinct()
+            ->orderBy('applications.name')
+            ->get();
+
+        Log::info('Webhook available applications resolved', [
+            'employee_id' => $employee->id,
+            'account_application_codes' => $this->getActiveAccounts($employee)
+                ->pluck('application_code')
+                ->values()
+                ->all(),
+            'resolved_application_codes' => $apps->pluck('code')->values()->all(),
+        ]);
+
+        return $apps;
     }
 }

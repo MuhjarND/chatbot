@@ -21,6 +21,8 @@ class MagicLoginService
      */
     public function createToken(Employee $employee, string $applicationCode): ?string
     {
+        $applicationCode = $this->normalizeApplicationCode($applicationCode);
+
         // Generate cryptographically secure random token (32 bytes = 64 hex chars)
         $rawToken  = bin2hex(random_bytes(32));
         $tokenHash = hash('sha256', $rawToken);
@@ -53,6 +55,7 @@ class MagicLoginService
      */
     public function validateToken(string $rawToken, string $applicationCode, ?string $ip = null, ?string $userAgent = null): array
     {
+        $applicationCode = $this->normalizeApplicationCode($applicationCode);
         $tokenHash = hash('sha256', $rawToken);
 
         return DB::transaction(function () use ($tokenHash, $applicationCode, $ip, $userAgent) {
@@ -100,7 +103,7 @@ class MagicLoginService
 
             // Check employee_app_account is active
             $appAccount = EmployeeAppAccount::where('employee_id', $employee->id)
-                ->where('application_code', $applicationCode)
+                ->whereRaw('LOWER(TRIM(application_code)) = ?', [$applicationCode])
                 ->active()
                 ->first();
 
@@ -136,5 +139,10 @@ class MagicLoginService
                 'application_code' => $applicationCode,
             ];
         });
+    }
+
+    private function normalizeApplicationCode(string $applicationCode): string
+    {
+        return strtolower(trim($applicationCode));
     }
 }
