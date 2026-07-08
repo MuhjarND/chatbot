@@ -45,6 +45,7 @@ return [
         'bakusapa'     => env('APP_BASE_URL_BAKUSAPA', 'https://bakusapa.pta-papuabarat.go.id'),
         'bukutamu'     => env('APP_BASE_URL_BUKUTAMU', 'https://bukutamu.pta-papuabarat.go.id'),
         'koperasi'     => env('APP_BASE_URL_KOPERASI', 'https://koperasi.pta-papuabarat.go.id'),
+        'papeda'       => env('APP_BASE_URL_PAPEDA', 'https://papeda.pta-papuabarat.go.id'),
         'sikasuar'     => env('APP_BASE_URL_SIKASUAR', 'https://sikasuar.pta-papuabarat.go.id'),
         'simisol'      => env('APP_BASE_URL_SIMISOL', 'https://simisol.pta-papuabarat.go.id'),
         'siperlatin'   => env('APP_BASE_URL_SIPERLATIN', 'https://siperlatin.pta-papuabarat.go.id'),
