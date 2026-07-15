@@ -44,6 +44,7 @@ return [
         'aplikasicuti' => env('APP_BASE_URL_APLIKASICUTI', 'https://aplikasicuti.pta-papuabarat.go.id'),
         'bakusapa'     => env('APP_BASE_URL_BAKUSAPA', 'https://bakusapa.pta-papuabarat.go.id'),
         'bukutamu'     => env('APP_BASE_URL_BUKUTAMU', 'https://bukutamu.pta-papuabarat.go.id'),
+        'kasuari'      => env('APP_BASE_URL_KASUARI', 'http://41.216.191.70:8181/kasuari'),
         'koperasi'     => env('APP_BASE_URL_KOPERASI', 'https://koperasi.pta-papuabarat.go.id'),
         'papeda'       => env('APP_BASE_URL_PAPEDA', 'https://papeda.pta-papuabarat.go.id'),
         'sikasuar'     => env('APP_BASE_URL_SIKASUAR', 'https://sikasuar.pta-papuabarat.go.id'),
