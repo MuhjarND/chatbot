@@ -94,6 +94,11 @@ class FonnteWebhookController extends Controller
             return response()->json(['status' => true, 'message' => 'Webhook processed']);
         }
 
+        // Handle direct commands that open a specific module in an application.
+        if ($this->handleDirectCommand($employee, $normalizedSender, $messageLower)) {
+            return response()->json(['status' => true, 'message' => 'Webhook processed']);
+        }
+
         // Handle numeric input (app selection)
         if (ctype_digit($message)) {
             $this->handleAppSelection($employee, $normalizedSender, (int) $message);
@@ -107,6 +112,57 @@ class FonnteWebhookController extends Controller
         );
 
         return response()->json(['status' => true, 'message' => 'Webhook processed']);
+    }
+
+    /**
+     * Handle a direct command that opens a module inside a specific application.
+     */
+    protected function handleDirectCommand(Employee $employee, string $sender, string $messageLower): bool
+    {
+        $commands = [
+            'cuti' => [
+                'application_code' => 'papeda',
+                'redirect' => '/cuti/create',
+                'label' => 'Pengajuan Cuti',
+            ],
+        ];
+
+        if (!isset($commands[$messageLower])) {
+            return false;
+        }
+
+        $command = $commands[$messageLower];
+        $selectedApp = $this->getAvailableApplications($employee)
+            ->first(function ($app) use ($command) {
+                return strtolower(trim($app->code)) === $command['application_code'];
+            });
+
+        if (!$selectedApp) {
+            $this->fonnteService->sendMessage(
+                $sender,
+                'Anda belum memiliki akses ke aplikasi Papeda. Silakan hubungi admin.'
+            );
+
+            $this->accessLogService->log([
+                'employee_id' => $employee->id,
+                'application_code' => $command['application_code'],
+                'action' => 'webhook_direct_command_denied',
+                'status' => 'failed',
+                'message' => 'Direct command access denied: ' . $messageLower,
+            ]);
+
+            return true;
+        }
+
+        $this->sendMagicLoginLink(
+            $employee,
+            $sender,
+            $selectedApp,
+            $command['redirect'],
+            $command['label']
+        );
+
+        return true;
     }
 
     /**
@@ -184,8 +240,21 @@ class FonnteWebhookController extends Controller
 
         $selectedApp = $apps[$selection - 1];
 
+        $this->sendMagicLoginLink($employee, $sender, $selectedApp);
+    }
+
+    /**
+     * Create and send a magic login link, optionally opening a module directly.
+     */
+    protected function sendMagicLoginLink(
+        Employee $employee,
+        string $sender,
+        $selectedApp,
+        string $redirect = '',
+        string $destinationLabel = ''
+    ): void {
         // Rate limit check: max tokens per employee in window
-        $maxTokens    = config('chatbot.rate_limit_max_tokens', 5);
+        $maxTokens = config('chatbot.rate_limit_max_tokens', 5);
         $windowMinutes = config('chatbot.rate_limit_window_minutes', 10);
 
         $recentTokenCount = LoginToken::where('employee_id', $employee->id)
@@ -199,17 +268,16 @@ class FonnteWebhookController extends Controller
             );
 
             $this->accessLogService->log([
-                'employee_id'      => $employee->id,
+                'employee_id' => $employee->id,
                 'application_code' => $selectedApp->code,
-                'action'           => 'webhook_rate_limited',
-                'status'           => 'failed',
-                'message'          => 'Rate limit exceeded',
+                'action' => 'webhook_rate_limited',
+                'status' => 'failed',
+                'message' => 'Rate limit exceeded',
             ]);
 
             return;
         }
 
-        // Create magic login token
         $rawToken = $this->magicLoginService->createToken($employee, $selectedApp->code);
 
         if (!$rawToken) {
@@ -220,21 +288,29 @@ class FonnteWebhookController extends Controller
             return;
         }
 
-        $ttl  = config('chatbot.magic_link_ttl_minutes', 5);
-        $link = $selectedApp->base_url . '/autologin?token=' . $rawToken;
+        $ttl = config('chatbot.magic_link_ttl_minutes', 5);
+        $query = ['token' => $rawToken];
 
-        $replyMessage = "Silakan buka aplikasi *{$selectedApp->name}* melalui link berikut:\n\n";
+        if ($redirect !== '') {
+            $query['redirect'] = $redirect;
+        }
+
+        $link = rtrim($selectedApp->base_url, '/') . '/autologin?' . http_build_query($query);
+        $destinationLabel = $destinationLabel ?: $selectedApp->name;
+        $replyMessage = "Silakan buka *{$destinationLabel}* melalui link berikut:\n\n";
         $replyMessage .= "{$link}\n\n";
         $replyMessage .= "Link berlaku selama {$ttl} menit dan hanya bisa digunakan satu kali.";
 
         $this->fonnteService->sendMessage($sender, $replyMessage);
 
         $this->accessLogService->log([
-            'employee_id'      => $employee->id,
+            'employee_id' => $employee->id,
             'application_code' => $selectedApp->code,
-            'action'           => 'webhook_magic_link_sent',
-            'status'           => 'success',
-            'message'          => 'Magic link sent for ' . $selectedApp->name,
+            'action' => $redirect !== '' ? 'webhook_direct_magic_link_sent' : 'webhook_magic_link_sent',
+            'status' => 'success',
+            'message' => $redirect !== ''
+                ? 'Magic link sent for ' . $destinationLabel
+                : 'Magic link sent for ' . $selectedApp->name,
         ]);
     }
 
