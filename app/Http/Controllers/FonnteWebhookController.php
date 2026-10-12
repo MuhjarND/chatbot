@@ -125,6 +125,11 @@ class FonnteWebhookController extends Controller
                 'redirect' => '/cuti/create',
                 'label' => 'Pengajuan Cuti',
             ],
+            'barang' => [
+                'application_code' => 'papeda',
+                'redirect' => '/persediaan/pengajuan/create',
+                'label' => 'Pengajuan Barang',
+            ],
         ];
 
         if (!isset($commands[$messageLower])) {
@@ -344,6 +349,7 @@ class FonnteWebhookController extends Controller
             ->where('employee_app_accounts.employee_id', $employee->id)
             ->where('employee_app_accounts.is_active', true)
             ->where('applications.is_active', true)
+            ->whereNotIn(DB::raw('LOWER(TRIM(applications.code))'), ['simisol', 'smart', 'koperasi'])
             ->distinct()
             ->orderBy('applications.name')
             ->get();
