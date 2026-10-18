@@ -10,6 +10,7 @@ use App\Services\FonnteService;
 use App\Services\WhatsappNumberService;
 use App\Services\MagicLoginService;
 use App\Services\AccessLogService;
+use App\Services\PapedaAgendaService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,7 +40,7 @@ class FonnteWebhookController extends Controller
      *
      * POST /api/webhook/fonnte
      */
-    public function handle(Request $request)
+    public function handle(Request $request, PapedaAgendaService $agendaService)
     {
         $sender  = $request->input('sender', '');
         $message = trim($request->input('message', ''));
@@ -94,6 +95,11 @@ class FonnteWebhookController extends Controller
             return response()->json(['status' => true, 'message' => 'Webhook processed']);
         }
 
+        if ($messageLower === 'agenda') {
+            $this->handleAgenda($employee, $normalizedSender, $agendaService);
+            return response()->json(['status' => true, 'message' => 'Webhook processed']);
+        }
+
         // Handle direct commands that open a specific module in an application.
         if ($this->handleDirectCommand($employee, $normalizedSender, $messageLower)) {
             return response()->json(['status' => true, 'message' => 'Webhook processed']);
@@ -112,6 +118,51 @@ class FonnteWebhookController extends Controller
         );
 
         return response()->json(['status' => true, 'message' => 'Webhook processed']);
+    }
+
+    protected function handleAgenda(Employee $employee, string $sender, PapedaAgendaService $agendaService): void
+    {
+        $application = $this->getAvailableApplications($employee)->first(function ($app) {
+            return strtolower(trim($app->code)) === 'papeda';
+        });
+        $accounts = $this->getActiveAccounts($employee)->filter(function ($account) {
+            return strtolower(trim($account->application_code)) === 'papeda'
+                && trim((string) $account->app_user_id) !== '';
+        })->values();
+
+        if (!$application || $accounts->count() !== 1) {
+            $this->fonnteService->sendMessage($sender,
+                'Akses atau mapping akun Papeda Anda belum tersedia atau perlu diperiksa. Silakan hubungi admin.');
+            return;
+        }
+
+        try {
+            $data = $agendaService->fetch($application->base_url, trim((string) $accounts->first()->app_user_id));
+            $messages = $agendaService->messages($employee->name, $data);
+        } catch (\Throwable $e) {
+            Log::warning('Papeda agenda request failed', [
+                'employee_id' => $employee->id,
+                'exception' => get_class($e),
+                'code' => $e->getCode(),
+            ]);
+            $this->fonnteService->sendMessage($sender,
+                'Agenda Papeda belum dapat diambil. Silakan coba lagi nanti atau hubungi admin untuk memeriksa akses Papeda Anda.');
+            return;
+        }
+
+        foreach ($messages as $message) {
+            $result = $this->fonnteService->sendMessage($sender, $message);
+            if (empty($result['status'])) {
+                return;
+            }
+        }
+        $this->accessLogService->log([
+            'employee_id' => $employee->id,
+            'application_code' => 'papeda',
+            'action' => 'webhook_agenda_sent',
+            'status' => 'success',
+            'message' => 'Agenda pribadi dikirim: ' . count($data['events']) . ' agenda.',
+        ]);
     }
 
     /**
