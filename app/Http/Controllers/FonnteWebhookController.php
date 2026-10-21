@@ -173,13 +173,21 @@ class FonnteWebhookController extends Controller
         $commands = [
             'cuti' => [
                 'application_code' => 'papeda',
+                'application_name' => 'Papeda',
                 'redirect' => '/cuti/create',
                 'label' => 'Pengajuan Cuti',
             ],
             'barang' => [
                 'application_code' => 'papeda',
+                'application_name' => 'Papeda',
                 'redirect' => '/persediaan/pengajuan/create',
                 'label' => 'Pengajuan Barang',
+            ],
+            'kasuari' => [
+                'application_code' => 'kasuari',
+                'application_name' => 'Kasuari',
+                'redirect' => '',
+                'label' => 'Kasuari',
             ],
         ];
 
@@ -196,7 +204,7 @@ class FonnteWebhookController extends Controller
         if (!$selectedApp) {
             $this->fonnteService->sendMessage(
                 $sender,
-                'Anda belum memiliki akses ke aplikasi Papeda. Silakan hubungi admin.'
+                'Anda belum memiliki akses ke aplikasi ' . $command['application_name'] . '. Silakan hubungi admin.'
             );
 
             $this->accessLogService->log([
